@@ -1,0 +1,632 @@
+using System;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+
+namespace MQBroker
+{
+    // Clases para representar los mensajes que se intercambian
+    public class MessageRequest
+    {
+        public string Action { get; set; }
+        public Guid AppId { get; set; }
+        public string Topic { get; set; }
+        public string Content { get; set; }
+    }
+
+    public class MessageResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+        public string Content { get; set; }
+    }
+
+    // Clase para representar un nodo en una lista enlazada simple
+    public class Node<T>
+    {
+        public T Data { get; set; }
+        public Node<T> Next { get; set; }
+
+        public Node(T data)
+        {
+            Data = data;
+            Next = null;
+        }
+    }
+
+    // Implementación de lista enlazada simple
+    public class LinkedList<T>
+    {
+        private Node<T> head;
+        private Node<T> tail;
+        private int count;
+
+        public int Count => count;
+
+        public LinkedList()
+        {
+            head = null;
+            tail = null;
+            count = 0;
+        }
+
+        public void Add(T data)
+        {
+            Node<T> newNode = new Node<T>(data);
+
+            if (head == null)
+            {
+                head = newNode;
+                tail = newNode;
+            }
+            else
+            {
+                tail.Next = newNode;
+                tail = newNode;
+            }
+
+            count++;
+        }
+
+        public bool Remove(T data)
+        {
+            if (head == null)
+                return false;
+
+            if (EqualityComparer<T>.Default.Equals(head.Data, data))
+            {
+                head = head.Next;
+                count--;
+
+                if (head == null)
+                    tail = null;
+
+                return true;
+            }
+
+            Node<T> current = head;
+            while (current.Next != null)
+            {
+                if (EqualityComparer<T>.Default.Equals(current.Next.Data, data))
+                {
+                    if (current.Next == tail)
+                        tail = current;
+
+                    current.Next = current.Next.Next;
+                    count--;
+                    return true;
+                }
+                current = current.Next;
+            }
+
+            return false;
+        }
+
+        public bool Contains(T data)
+        {
+            Node<T> current = head;
+            while (current != null)
+            {
+                if (EqualityComparer<T>.Default.Equals(current.Data, data))
+                    return true;
+                current = current.Next;
+            }
+            return false;
+        }
+
+        public IEnumerable<T> GetAll()
+        {
+            Node<T> current = head;
+            while (current != null)
+            {
+                yield return current.Data;
+                current = current.Next;
+            }
+        }
+    }
+
+    // Implementación de cola (FIFO)
+    public class Queue<T>
+    {
+        private Node<T> head;
+        private Node<T> tail;
+        private int count;
+
+        public int Count => count;
+
+        public Queue()
+        {
+            head = null;
+            tail = null;
+            count = 0;
+        }
+
+        public void Enqueue(T data)
+        {
+            Node<T> newNode = new Node<T>(data);
+
+            if (head == null)
+            {
+                head = newNode;
+                tail = newNode;
+            }
+            else
+            {
+                tail.Next = newNode;
+                tail = newNode;
+            }
+
+            count++;
+        }
+
+        public T Dequeue()
+        {
+            if (head == null)
+                throw new InvalidOperationException("La cola está vacía");
+
+            T value = head.Data;
+            head = head.Next;
+            count--;
+
+            if (head == null)
+                tail = null;
+
+            return value;
+        }
+
+        public bool IsEmpty()
+        {
+            return count == 0;
+        }
+
+        public T Peek()
+        {
+            if (head == null)
+                throw new InvalidOperationException("La cola está vacía");
+
+            return head.Data;
+        }
+    }
+
+    // Clase para representar un par clave-valor en nuestra tabla hash personalizada
+    public class KeyValuePair<TKey, TValue>
+    {
+        public TKey Key { get; }
+        public TValue Value { get; set; }
+
+        public KeyValuePair(TKey key, TValue value)
+        {
+            Key = key;
+            Value = value;
+        }
+    }
+
+    // Implementación simple de una tabla hash
+    public class HashTable<TKey, TValue>
+    {
+        private LinkedList<KeyValuePair<TKey, TValue>>[] buckets;
+        private int count;
+        private const int DefaultCapacity = 100;
+
+        public int Count => count;
+
+        public HashTable() : this(DefaultCapacity)
+        {
+        }
+
+        public HashTable(int capacity)
+        {
+            buckets = new LinkedList<KeyValuePair<TKey, TValue>>[capacity];
+            for (int i = 0; i < capacity; i++)
+            {
+                buckets[i] = new LinkedList<KeyValuePair<TKey, TValue>>();
+            }
+            count = 0;
+        }
+
+        private int GetBucketIndex(TKey key)
+        {
+            int hashCode = key.GetHashCode();
+            return Math.Abs(hashCode) % buckets.Length;
+        }
+
+        public void Add(TKey key, TValue value)
+        {
+            int bucketIndex = GetBucketIndex(key);
+            var bucket = buckets[bucketIndex];
+
+            foreach (var pair in bucket.GetAll())
+            {
+                if (EqualityComparer<TKey>.Default.Equals(pair.Key, key))
+                {
+                    throw new ArgumentException("Una entrada con la misma clave ya existe");
+                }
+            }
+
+            bucket.Add(new KeyValuePair<TKey, TValue>(key, value));
+            count++;
+        }
+
+        public bool Remove(TKey key)
+        {
+            int bucketIndex = GetBucketIndex(key);
+            var bucket = buckets[bucketIndex];
+
+            foreach (var pair in bucket.GetAll())
+            {
+                if (EqualityComparer<TKey>.Default.Equals(pair.Key, key))
+                {
+                    bool result = bucket.Remove(pair);
+                    if (result)
+                        count--;
+                    return result;
+                }
+            }
+
+            return false;
+        }
+
+        public bool TryGetValue(TKey key, out TValue value)
+        {
+            int bucketIndex = GetBucketIndex(key);
+            var bucket = buckets[bucketIndex];
+
+            foreach (var pair in bucket.GetAll())
+            {
+                if (EqualityComparer<TKey>.Default.Equals(pair.Key, key))
+                {
+                    value = pair.Value;
+                    return true;
+                }
+            }
+
+            value = default;
+            return false;
+        }
+
+        public bool ContainsKey(TKey key)
+        {
+            int bucketIndex = GetBucketIndex(key);
+            var bucket = buckets[bucketIndex];
+
+            foreach (var pair in bucket.GetAll())
+            {
+                if (EqualityComparer<TKey>.Default.Equals(pair.Key, key))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public void Set(TKey key, TValue value)
+        {
+            int bucketIndex = GetBucketIndex(key);
+            var bucket = buckets[bucketIndex];
+
+            foreach (var pair in bucket.GetAll())
+            {
+                if (EqualityComparer<TKey>.Default.Equals(pair.Key, key))
+                {
+                    pair.Value = value;
+                    return;
+                }
+            }
+
+            bucket.Add(new KeyValuePair<TKey, TValue>(key, value));
+            count++;
+        }
+
+        public IEnumerable<KeyValuePair<TKey, TValue>> GetAll()
+        {
+            for (int i = 0; i < buckets.Length; i++)
+            {
+                foreach (var pair in buckets[i].GetAll())
+                {
+                    yield return pair;
+                }
+            }
+        }
+    }
+
+    // Clase para almacenar información de suscripción
+    public class Subscription
+    {
+        public string Topic { get; set; }
+        public Guid AppId { get; set; }
+
+        public Subscription(string topic, Guid appId)
+        {
+            Topic = topic;
+            AppId = appId;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is Subscription other)
+            {
+                return Topic == other.Topic && AppId == other.AppId;
+            }
+            return false;
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(Topic, AppId);
+        }
+    }
+
+    // Clase para representar una cola de mensajes
+    public class MessageQueue
+    {
+        private Queue<string> messages;
+
+        public MessageQueue()
+        {
+            messages = new Queue<string>();
+        }
+
+        public void Enqueue(string message)
+        {
+            messages.Enqueue(message);
+        }
+
+        public string Dequeue()
+        {
+            if (messages.IsEmpty())
+                return null;
+            return messages.Dequeue();
+        }
+
+        public bool IsEmpty()
+        {
+            return messages.IsEmpty();
+        }
+    }
+
+    // Clase principal del broker
+    public class Broker
+    {
+        // Mapa de temas a listas de AppIds suscritos
+        private HashTable<string, LinkedList<Guid>> subscriptions;
+        
+        // Mapa de (tema + AppId) a cola de mensajes
+        private HashTable<string, MessageQueue> messageQueues;
+        
+        // Socket para comunicación
+        private Socket serverSocket;
+        
+        // Puerto de escucha
+        private int port;
+
+        public Broker(int port)
+        {
+            this.port = port;
+            subscriptions = new HashTable<string, LinkedList<Guid>>();
+            messageQueues = new HashTable<string, MessageQueue>();
+        }
+
+        // Método para iniciar el broker
+        public void Start()
+        {
+            Console.WriteLine("Iniciando MQBroker...");
+            
+            // Crear socket servidor
+            serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            serverSocket.Bind(new IPEndPoint(IPAddress.Any, port));
+            serverSocket.Listen(10);
+            
+            Console.WriteLine($"MQBroker escuchando en el puerto {port}");
+            
+            // Aceptar conexiones de clientes en un bucle
+            while (true)
+            {
+                try
+                {
+                    Socket clientSocket = serverSocket.Accept();
+                    Console.WriteLine("Cliente conectado");
+                    
+                    // Procesar al cliente en un hilo separado
+                    Task.Run(() => HandleClient(clientSocket));
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error al aceptar conexión: {ex.Message}");
+                }
+            }
+        }
+
+        // Método para manejar la comunicación con un cliente
+        private void HandleClient(Socket clientSocket)
+        {
+            try
+            {
+                byte[] buffer = new byte[4096];
+                int bytesRead = clientSocket.Receive(buffer);
+                
+                if (bytesRead > 0)
+                {
+                    string jsonMessage = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                    MessageRequest request = JsonSerializer.Deserialize<MessageRequest>(jsonMessage);
+                    
+                    MessageResponse response = ProcessRequest(request);
+                    
+                    // Enviar respuesta al cliente
+                    string jsonResponse = JsonSerializer.Serialize(response);
+                    byte[] responseBytes = Encoding.UTF8.GetBytes(jsonResponse);
+                    clientSocket.Send(responseBytes);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al manejar cliente: {ex.Message}");
+            }
+            finally
+            {
+                clientSocket.Close();
+            }
+        }
+
+        // Método para procesar la solicitud del cliente
+        private MessageResponse ProcessRequest(MessageRequest request)
+        {
+            Console.WriteLine($"Procesando solicitud: {request.Action} - AppId: {request.AppId} - Topic: {request.Topic}");
+            
+            switch (request.Action)
+            {
+                case "Subscribe":
+                    return HandleSubscribe(request.AppId, request.Topic);
+                case "Unsubscribe":
+                    return HandleUnsubscribe(request.AppId, request.Topic);
+                case "Publish":
+                    return HandlePublish(request.AppId, request.Topic, request.Content);
+                case "Receive":
+                    return HandleReceive(request.AppId, request.Topic);
+                default:
+                    return new MessageResponse { Success = false, Message = "Acción no reconocida" };
+            }
+        }
+
+        // Método para manejar la solicitud de suscripción
+        private MessageResponse HandleSubscribe(Guid appId, string topic)
+        {
+            lock (subscriptions)
+            {
+                // Verificar si el tema existe
+                LinkedList<Guid> subscribers;
+                if (!subscriptions.TryGetValue(topic, out subscribers))
+                {
+                    subscribers = new LinkedList<Guid>();
+                    subscriptions.Set(topic, subscribers);
+                }
+                
+                // Verificar si el AppID ya está suscrito
+                if (subscribers.Contains(appId))
+                {
+                    return new MessageResponse { Success = false, Message = $"AppID {appId} ya está suscrito al tema {topic}" };
+                }
+                
+                // Suscribir al AppID
+                subscribers.Add(appId);
+                
+                // Crear una cola para este AppID y tema
+                string queueKey = $"{topic}:{appId}";
+                if (!messageQueues.ContainsKey(queueKey))
+                {
+                    messageQueues.Set(queueKey, new MessageQueue());
+                }
+                
+                return new MessageResponse { Success = true, Message = $"AppID {appId} suscrito correctamente al tema {topic}" };
+            }
+        }
+
+        // Método para manejar la solicitud de cancelación de suscripción
+        private MessageResponse HandleUnsubscribe(Guid appId, string topic)
+        {
+            lock (subscriptions)
+            {
+                // Verificar si el tema existe
+                LinkedList<Guid> subscribers;
+                if (!subscriptions.TryGetValue(topic, out subscribers))
+                {
+                    return new MessageResponse { Success = false, Message = $"El tema {topic} no existe" };
+                }
+                
+                // Verificar si el AppID está suscrito
+                if (!subscribers.Contains(appId))
+                {
+                    return new MessageResponse { Success = false, Message = $"AppID {appId} no está suscrito al tema {topic}" };
+                }
+                
+                // Eliminar la suscripción
+                subscribers.Remove(appId);
+                
+                // Eliminar la cola para este AppID y tema
+                string queueKey = $"{topic}:{appId}";
+                messageQueues.Remove(queueKey);
+                
+                // Si no quedan suscriptores, eliminar el tema
+                if (subscribers.Count == 0)
+                {
+                    subscriptions.Remove(topic);
+                }
+                
+                return new MessageResponse { Success = true, Message = $"AppID {appId} desuscrito correctamente del tema {topic}" };
+            }
+        }
+
+        // Método para manejar la solicitud de publicación
+        private MessageResponse HandlePublish(Guid appId, string topic, string content)
+        {
+            lock (subscriptions)
+            {
+                // Verificar si el tema existe y tiene suscriptores
+                LinkedList<Guid> subscribers;
+                if (!subscriptions.TryGetValue(topic, out subscribers) || subscribers.Count == 0)
+                {
+                    return new MessageResponse { Success = false, Message = $"El tema {topic} no existe o no tiene suscriptores" };
+                }
+                
+                // Publicar el mensaje a todos los suscriptores
+                foreach (Guid subscriberId in subscribers.GetAll())
+                {
+                    string queueKey = $"{topic}:{subscriberId}";
+                    MessageQueue queue;
+                    if (messageQueues.TryGetValue(queueKey, out queue))
+                    {
+                        queue.Enqueue(content);
+                    }
+                }
+                
+                return new MessageResponse { Success = true, Message = $"Mensaje publicado correctamente en el tema {topic}" };
+            }
+        }
+
+        // Método para manejar la solicitud de recepción
+        private MessageResponse HandleReceive(Guid appId, string topic)
+        {
+            lock (subscriptions)
+            {
+                // Verificar si el AppID está suscrito al tema
+                LinkedList<Guid> subscribers;
+                if (!subscriptions.TryGetValue(topic, out subscribers) || !subscribers.Contains(appId))
+                {
+                    return new MessageResponse { Success = false, Message = $"AppID {appId} no está suscrito al tema {topic}" };
+                }
+                
+                // Obtener la cola para este AppID y tema
+                string queueKey = $"{topic}:{appId}";
+                MessageQueue queue;
+                if (!messageQueues.TryGetValue(queueKey, out queue) || queue.IsEmpty())
+                {
+                    return new MessageResponse { Success = false, Message = $"No hay mensajes en la cola para AppID {appId} y tema {topic}" };
+                }
+                
+                // Obtener el mensaje de la cola
+                string message = queue.Dequeue();
+                
+                return new MessageResponse { Success = true, Message = "Mensaje recibido correctamente", Content = message };
+            }
+        }
+    }
+
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            int port = 8888; // Puerto por defecto
+            
+            // Permitir especificar el puerto como argumento
+            if (args.Length > 0 && int.TryParse(args[0], out int customPort))
+            {
+                port = customPort;
+            }
+            
+            Broker broker = new Broker(port);
+            broker.Start();
+        }
+    }
+}
