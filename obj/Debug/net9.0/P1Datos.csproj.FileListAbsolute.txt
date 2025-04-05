@@ -1,0 +1,11 @@
+C:\Users\lizan\source\repos\P1-Datos\bin\Debug\net9.0\P1Datos.deps.json
+C:\Users\lizan\source\repos\P1-Datos\bin\Debug\net9.0\P1Datos.dll
+C:\Users\lizan\source\repos\P1-Datos\bin\Debug\net9.0\P1Datos.pdb
+C:\Users\lizan\source\repos\P1-Datos\obj\Debug\net9.0\P1Datos.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\lizan\source\repos\P1-Datos\obj\Debug\net9.0\P1Datos.AssemblyInfoInputs.cache
+C:\Users\lizan\source\repos\P1-Datos\obj\Debug\net9.0\P1Datos.AssemblyInfo.cs
+C:\Users\lizan\source\repos\P1-Datos\obj\Debug\net9.0\P1Datos.csproj.CoreCompileInputs.cache
+C:\Users\lizan\source\repos\P1-Datos\obj\Debug\net9.0\P1Datos.dll
+C:\Users\lizan\source\repos\P1-Datos\obj\Debug\net9.0\refint\P1Datos.dll
+C:\Users\lizan\source\repos\P1-Datos\obj\Debug\net9.0\P1Datos.pdb
+C:\Users\lizan\source\repos\P1-Datos\obj\Debug\net9.0\ref\P1Datos.dll
