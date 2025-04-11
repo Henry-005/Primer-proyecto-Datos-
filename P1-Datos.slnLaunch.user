@@ -7,7 +7,7 @@
         "Action": "Start"
       },
       {
-        "Path": "P1Datos.csproj",
+        "Path": "..\\MQBroker\\MQBroker.csproj",
         "Action": "Start"
       }
     ]
